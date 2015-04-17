@@ -1,0 +1,19 @@
+{
+    "from": {
+        "url": "https://alphaint.atlassian.net/rest/api/latest/",
+        "username": "rroble",
+        "password": "",
+        "author": "rroble"
+    },
+    "to": {
+        "url": "https://arcanys.atlassian.net/rest/api/latest/",
+        "username": "rroble",
+        "password": "",
+        "author": "rroble"
+    },
+    "projects": {
+        "ACC": "COUR",
+        "SS": "SQUAR"
+    },
+    "since": "-7d"
+}
