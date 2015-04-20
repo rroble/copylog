@@ -2,11 +2,10 @@
 
 namespace Jira;
 
-use Doctrine\Common\Cache\CacheProvider;
+use GuzzleHttp\Exception\ClientException;
 use JiraApi\Clients\IssueClient;
 use JiraApi\Clients\ProjectClient;
 use JiraApi\Search\SearchBuilder;
-use Psr\Log\LoggerInterface;
 
 /**
  * @author Randolph Roble <r.roble@arcanys.com>
@@ -14,6 +13,9 @@ use Psr\Log\LoggerInterface;
 class Jira
 {
 
+    use Logger;
+    use Cache;
+    
     /**
      * @var ProjectClient
      */
@@ -23,23 +25,29 @@ class Jira
      * @var IssueClient
      */
     private $issueClient;
-
+    
     /**
-     * @var CacheProvider
+     * @var \stdClass
      */
-    private $cache;
+    private $config;
 
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-
-    public function __construct(\stdClass $config, CacheProvider $cache = null, LoggerInterface $logger = null)
+    public function __construct(\stdClass $config)
     {
+        $this->config = $config;
         $this->projectClient = new ProjectClient($config->url, $config->username, $config->password);
         $this->issueClient = new IssueClient($config->url, $config->username, $config->password);
-        $this->cache = $cache;
-        $this->logger = $logger;
+    }
+    
+    public function verifyUser()
+    {
+        try {
+            // TODO: ask password from INPUT
+            $this->issueClient->getRequest(sprintf('user?username=%s', $this->config->username))->json();
+            $this->logCall(sprintf('%s ok', $this->config->url));
+        } catch(ClientException $e) {
+            $this->logCall($e->getMessage());
+            die('Please check config file.');
+        }
     }
 
     public function copyWorklogs(array $worklogs, $project, $author)
@@ -54,43 +62,79 @@ class Jira
                 try {
                     $issue = $this->createIssue($summary, $project);
                 } catch (\Exception $e) {
-                    if ($this->logger) {
-                        $this->logger->warning($e->getMessage());
-                    }
+                    $this->logCall($e->getMessage());
                     continue;
                 }
             }
 
+            $copied = false;
             $logs = $this->getWorklogs($issue['key']);
-            foreach ($logs['worklogs'] as $log) {
-                if ($log['author']['name'] == $author) {
-                    if ($log['comment'] == $worklog['comment']) {
-                        continue 2;
-                    }
+            foreach ($logs['worklogs'] as $log) 
+            {
+                // only from author
+                if ($log['author']['name'] != $author) {
+                    continue;
+                }
+                
+                // check if already copied
+                $copied = $this->isCopied($log, $worklog);
+                if ($copied) {
+                    break;
                 }
             }
 
-            $this->createWorklog($issue['key'], $worklog);
+            if (!$copied) {
+                $this->createWorklog($issue['key'], $worklog);
+            }
         }
         
         $this->logCall('done');
     }
+    
+    protected function isCopied(array $worklog1, array $worklog2)
+    {
+        // compare comments
+        if ($worklog1['comment'] != $worklog2['comment']) {
+            return false;
+        }
+        
+        // compare time spent
+        if ($worklog1['timeSpentSeconds'] != $worklog2['timeSpentSeconds']) {
+            return false;
+        }
+        
+        // compare dates
+        $d1 = new \DateTime($worklog1['started']);
+        $d2 = new \DateTime($worklog2['started']);
+        $tz = new \DateTimeZone('Asia/Manila');
+        $d1->setTimezone($tz);
+        $d2->setTimezone($tz);
+        if ($d1->format('Y-m-d') != $d2->format('Y-m-d')) {
+            return false;
+        }
+        
+        return true;
+    }
 
     public function createWorklog($idOrKey, array $worklog)
     {
-        $this->logCall($idOrKey);
+        $this->logCall(sprintf('********* %s ********', $idOrKey));
 
         $data = array(
             'comment' => $worklog['comment'],
             'timeSpentSeconds' => $worklog['timeSpentSeconds'],
             'started' => $worklog['started'],
         );
-        $this->issueClient->createWorklog($idOrKey, $data);
+        
+        $progress = $worklog['issue']['fields']['progress'];
+        $remaining = $progress['total'] - $progress['progress'];
+        
+        $this->issueClient->createWorklog($idOrKey, $data, 'new', sprintf('%dm', $remaining/60));
     }
 
     public function createIssue($summary, $projectKey)
     {
-        $this->logCall($summary);
+        $this->logCall(sprintf('++++++++++ %s ++++++++++', $summary));
         
         $project = $this->getProject($projectKey);
         if (!$project) {
@@ -104,7 +148,8 @@ class Jira
                 'summary' => $summary,
                 'issuetype' => [
                     'id' => 3, // FIXME: Task
-                ]
+                ],
+                // TODO: description -> Duplicate (link)
             ]
         );
 
@@ -117,19 +162,20 @@ class Jira
         $this->logCall($summary);
 
         $cacheId = sprintf('%s_issue_%s', $project, md5($summary));
-        if ($this->cache->contains($cacheId)) {
-            return $this->cache->fetch($cacheId);
+        if (($cached = $this->getCache($cacheId))) {
+            return $cached;
         }
 
         $builder = new SearchBuilder();
-        $jql = sprintf('project = %s AND text ~ "%s"', $project, $summary);
+        $escaped = str_replace(array('?', '-'), array('\\\\?', '\\\\-'), $summary);
+        $jql = sprintf('project = %s AND text ~ "%s"', $project, $escaped);
         $builder->setJql($jql);
 
         $issues = $this->issueClient->search($builder)->json();
         if (isset($issues['issues'][0])) {
             $issue = $issues['issues'][0];
 
-            $this->cache->save($cacheId, $issue, 60);
+            $this->saveCache($cacheId, $issue, 60);
 
             return $issue;
         }
@@ -138,13 +184,13 @@ class Jira
     public function getProject($idOrKey)
     {
         $cacheId = sprintf('project_%s', $idOrKey);
-        if ($this->cache->contains($cacheId)) {
-            return $this->cache->fetch($cacheId);
+        if (($cached = $this->getCache($cacheId))) {
+            return $cached;
         }
 
         $project = $this->projectClient->get($idOrKey)->json();
 
-        $this->cache->save($cacheId, $project, 60);
+        $this->saveCache($cacheId, $project, 60);
 
         return $project;
     }
@@ -154,32 +200,34 @@ class Jira
         $this->logCall($idOrKey);
 
         $cacheId = sprintf('%s_worklogs', $idOrKey);
-        if ($this->cache->contains($cacheId)) {
-            return $this->cache->fetch($cacheId);
+        if (($cached = $this->getCache($cacheId))) {
+            return $cached;
         }
 
         $worklogs = $this->issueClient->getFullWorklog($idOrKey)->json();
 
-        $this->cache->save($cacheId, $worklogs, 60);
+        $this->saveCache($cacheId, $worklogs, 60);
+        
+        $this->logCall(sprintf('found %d worklogs', count($worklogs)));
 
         return $worklogs;
     }
     
-    public function findWorklogs($project, $author, $since)
+    public function findWorklogs($project, $author, $since, $limit = 150)
     {
         $this->logCall(sprintf('from project %s by %s since %s', $project, $author, $since));
         $logs = [];
         
         $cacheId = sprintf('%s_worklogs_%s', $project, $author);
-        if ($this->cache->contains($cacheId)) {
-            $logs = $this->cache->fetch($cacheId);
+        if (($cached = $this->getCache($cacheId))) {
+            return $cached;
         }
         else
         {
             $builder = new SearchBuilder();
-            $jql = sprintf('project = %s AND status in (Open, "In Progress", Reopened, "Ready for QA") AND updated >= %s ORDER BY updated DESC', $project, $since);
+            $jql = sprintf('project = %s AND resolution = Unresolved AND updated >= %s ORDER BY updated DESC', $project, $since);
             $builder->setJql($jql);
-            $builder->setLimit(50);
+            $builder->setLimit($limit);
 
             $issues = $this->issueClient->search($builder)->json();
 
@@ -194,42 +242,12 @@ class Jira
                     }
                 }
             }
-            $this->cache->save($cacheId, $logs, 60 * 60 * 5); // 5 mins?
+            $this->saveCache($cacheId, $logs, 60 * 60 * 5); // 5 mins?
         }
         
         $this->logCall(sprintf('found %d worklogs', count($logs)));
         
         return $logs;
-    }
-    
-    public function getCache()
-    {
-        return $this->cache;
-    }
-
-    public function getLogger()
-    {
-        return $this->logger;
-    }
-
-    public function setCache(CacheProvider $cache)
-    {
-        $this->cache = $cache;
-        return $this;
-    }
-
-    public function setLogger(LoggerInterface $logger)
-    {
-        $this->logger = $logger;
-        return $this;
-    }
-
-    public function logCall($message = null)
-    {
-        if ($this->logger) {
-            $d = debug_backtrace()[1];
-            $this->logger->info(sprintf('%s::%s() %s', $d['class'], $d['function'], $message));
-        }
     }
 
 }

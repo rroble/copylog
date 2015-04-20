@@ -2,14 +2,12 @@
     "from": {
         "url": "https://alphaint.atlassian.net/rest/api/latest/",
         "username": "rroble",
-        "password": "",
-        "author": "rroble"
+        "password": ""
     },
     "to": {
         "url": "https://arcanys.atlassian.net/rest/api/latest/",
         "username": "rroble",
-        "password": "",
-        "author": "rroble"
+        "password": ""
     },
     "projects": {
         "ACC": "COUR",
