@@ -26,11 +26,16 @@ trait Logger
         return $this->logger;
     }
 
-    public function debug($message = null)
+    public function debug($message = null, $indent = 0)
     {
         if ($this->logger) {
             $d = debug_backtrace()[1];
-            $this->logger->debug(sprintf('%s() %s', $d['function'], $message));
+            $i = $indent ? $indent-1 : 0;
+            $pre = str_repeat('    ', $i);
+            if ($indent) {
+                $pre .= '  -> ';
+            }
+            $this->logger->debug(sprintf('%s%s() %s', $pre, $d['function'], $message));
         }
     }
 
@@ -39,6 +44,14 @@ trait Logger
         if ($this->logger) {
             $d = debug_backtrace()[1];
             $this->logger->info(sprintf('%s() %s', $d['function'], $message));
+        }
+    }
+
+    public function error($message = null)
+    {
+        if ($this->logger) {
+            $d = debug_backtrace()[1];
+            $this->logger->error(sprintf('%s() %s', $d['function'], $message));
         }
     }
 

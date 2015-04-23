@@ -25,17 +25,24 @@ class Config
     
     public $since;
     
-    public function __construct($file = 'config.json', $local = 'config.local.json')
+    public function __construct($dir, $file = 'config.json', $local = 'config.local.json')
     {
-        if (!file_exists($file)) {
-            throw new \Exception(sprintf('Config file "%s" does not exists!', $file));
-        }
-        $config = json_decode(file_get_contents($file), true);
+        $config = [];
         
-        if (file_exists($local))
+        $configFile = sprintf('%s%s%s', $dir, DIRECTORY_SEPARATOR, $file);
+        if (file_exists($configFile)) {
+            $config = json_decode(file_get_contents($configFile), true);
+        }
+        
+        $localConfigFile = sprintf('%s%s%s', $dir, DIRECTORY_SEPARATOR, $local);
+        if (file_exists($localConfigFile))
         {
-            $config2 = json_decode(file_get_contents($local), true);
+            $config2 = json_decode(file_get_contents($localConfigFile), true);
             $config = array_merge($config, $config2);
+        }
+        
+        if (!$config) {
+            throw new \Exception(sprintf('Config file "%s" or "%s" does not exists!', $file, $local));
         }
         
         $this->from = (object) $config['from'];
