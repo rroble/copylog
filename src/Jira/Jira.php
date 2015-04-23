@@ -43,16 +43,16 @@ class Jira
         try {
             // TODO: ask password from INPUT
             $this->issueClient->getRequest(sprintf('user?username=%s', $this->config->username))->json();
-            $this->logCall(sprintf('%s ok', $this->config->url));
+            $this->debug(sprintf('%s ok', $this->config->url));
         } catch(ClientException $e) {
-            $this->logCall($e->getMessage());
+            $this->debug($e->getMessage());
             die('Please check config file.');
         }
     }
 
     public function copyWorklogs(array $worklogs, $project, $author)
     {
-        $this->logCall();
+        $this->debug();
 
         foreach ($worklogs as $worklog) 
         {
@@ -62,7 +62,7 @@ class Jira
                 try {
                     $issue = $this->createIssue($summary, $project);
                 } catch (\Exception $e) {
-                    $this->logCall($e->getMessage());
+                    $this->debug($e->getMessage());
                     continue;
                 }
             }
@@ -88,7 +88,7 @@ class Jira
             }
         }
         
-        $this->logCall('done');
+        $this->debug('done');
     }
     
     protected function isCopied(array $worklog1, array $worklog2)
@@ -118,7 +118,7 @@ class Jira
 
     public function createWorklog($idOrKey, array $worklog)
     {
-        $this->logCall(sprintf('********* %s ********', $idOrKey));
+        $this->info(sprintf('********* %s ********', $idOrKey));
 
         $data = array(
             'comment' => $worklog['comment'],
@@ -134,7 +134,7 @@ class Jira
 
     public function createIssue($summary, $projectKey)
     {
-        $this->logCall(sprintf('++++++++++ %s ++++++++++', $summary));
+        $this->info(sprintf('++++++++++ %s ++++++++++', $summary));
         
         $project = $this->getProject($projectKey);
         if (!$project) {
@@ -159,7 +159,7 @@ class Jira
 
     public function findIssue($summary, $project)
     {
-        $this->logCall($summary);
+        $this->debug($summary);
 
         $cacheId = sprintf('%s_issue_%s', $project, md5($summary));
         if (($cached = $this->getCache($cacheId))) {
@@ -197,7 +197,7 @@ class Jira
 
     public function getWorklogs($idOrKey)
     {
-        $this->logCall($idOrKey);
+        $this->debug($idOrKey);
 
         $cacheId = sprintf('%s_worklogs', $idOrKey);
         if (($cached = $this->getCache($cacheId))) {
@@ -208,14 +208,14 @@ class Jira
 
         $this->saveCache($cacheId, $worklogs, 60);
         
-        $this->logCall(sprintf('found %d worklogs', count($worklogs)));
+        $this->debug(sprintf('found %d worklogs', count($worklogs)));
 
         return $worklogs;
     }
     
     public function findWorklogs($project, $author, $since, $limit = 150)
     {
-        $this->logCall(sprintf('from project %s by %s since %s', $project, $author, $since));
+        $this->debug(sprintf('from project %s by %s since %s', $project, $author, $since));
         $logs = [];
         
         $cacheId = sprintf('%s_worklogs_%s', $project, $author);
@@ -245,7 +245,7 @@ class Jira
             $this->saveCache($cacheId, $logs, 60 * 60 * 5); // 5 mins?
         }
         
-        $this->logCall(sprintf('found %d worklogs', count($logs)));
+        $this->debug(sprintf('found %d worklogs', count($logs)));
         
         return $logs;
     }

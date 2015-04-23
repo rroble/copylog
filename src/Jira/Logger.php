@@ -26,11 +26,19 @@ trait Logger
         return $this->logger;
     }
 
-    public function logCall($message = null)
+    public function debug($message = null)
     {
         if ($this->logger) {
             $d = debug_backtrace()[1];
-            $this->logger->info(sprintf('%s::%s() %s', $d['class'], $d['function'], $message));
+            $this->logger->debug(sprintf('%s() %s', $d['function'], $message));
+        }
+    }
+
+    public function info($message = null)
+    {
+        if ($this->logger) {
+            $d = debug_backtrace()[1];
+            $this->logger->info(sprintf('%s() %s', $d['function'], $message));
         }
     }
 
