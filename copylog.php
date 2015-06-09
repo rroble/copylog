@@ -6,11 +6,11 @@ use Jira\Jira;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 
-require_once 'vendor/autoload.php';
+require_once __DIR__.'/vendor/autoload.php';
 
 $logger = new Logger('copylog');
 $logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
-$logger->pushHandler(new StreamHandler('copylog.log', Logger::INFO));
+$logger->pushHandler(new StreamHandler(__DIR__.'/copylog.log', Logger::INFO));
 
 try {
     $config = new Config(__DIR__);
