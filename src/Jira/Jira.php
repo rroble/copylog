@@ -33,6 +33,8 @@ class Jira
      * @var \stdClass
      */
     private $config;
+    
+    private $versions = [];
 
     public function __construct(\stdClass $config, LoggerInterface $logger, CacheProvider $cacheProvider = null)
     {
@@ -54,19 +56,24 @@ class Jira
             $this->error($e->getMessage());
             die('Please check config file.');
         }
+        return $this;
     }
-
-    public function copyWorklogs(array $worklogs, $project, $author)
+    
+    public function copyWorklogs(array $worklogs, $to, $author)
     {
         $this->debug('', 1);
+        
+        $parts = array_map('trim', explode('>', $to));
+        $project = $parts[0];
+        $version = isset($parts[1]) ? $parts[1] : null;
 
         foreach ($worklogs as $worklog) 
         {
-            $summary = $worklog['issue']['fields']['summary'];
+            $summary = sprintf('[%s] %s', $worklog['issue']['key'], $worklog['issue']['fields']['summary']);
             $issue = $this->findIssue($summary, $project);
             if (!$issue) {
                 try {
-                    $issue = $this->createIssue($summary, $project, $worklog['issue']);
+                    $issue = $this->createIssue($summary, $project, $version, $worklog['issue']);
                 } catch (\Exception $e) {
                     $this->debug($e->getMessage());
                     continue;
@@ -137,8 +144,31 @@ class Jira
         
         $this->issueClient->createWorklog($idOrKey, $data, 'new', sprintf('%dm', $remaining/60));
     }
+    
+    protected function fetchVersions($idOrKey)
+    {
+        $result = $this->projectClient->getVersions($idOrKey)->json();
+        foreach ($result as $v) {
+            $name = $v['name'];
+            $this->versions[$idOrKey][$name] = $v['id'];
+        }
+    }
 
-    public function createIssue($summary, $projectKey, array $issue)
+    protected function getVersionId($projectKey, $version)
+    {
+        if (!$version) return null;
+        
+        if (!isset($this->versions[$projectKey])) 
+        {
+            $this->fetchVersions($projectKey);
+        }
+        if (isset($this->versions[$projectKey][$version]))
+        {
+            return $this->versions[$projectKey][$version];
+        }
+    }
+
+    public function createIssue($summary, $projectKey, $version, array $issue)
     {
         $this->info(sprintf('++++++++++ %s ++++++++++', $summary), 2);
         
@@ -161,6 +191,11 @@ class Jira
             ]
         );
         
+        $versionId = $this->getVersionId($projectKey, $version);
+        if ($versionId) {
+            $data['fields']['fixVersions'] = array(['id' => $versionId]);
+        }
+
         $result = $this->issueClient->create($data)->json();
         return $result;
     }
@@ -175,7 +210,9 @@ class Jira
         }
 
         $builder = new SearchBuilder();
-        $escaped = str_replace(array('?', '-'), array('\\\\?', '\\\\-'), $summary);
+        $find = array('?', '-', '[', ']');
+        $replace = array('\\\\?', '\\\\-', '\\\\[', '\\\\]');
+        $escaped = str_replace($find, $replace, $summary);
         $jql = sprintf('project = %s AND text ~ "%s"', $project, $escaped);
         $builder->setJql($jql);
 
