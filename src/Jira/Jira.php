@@ -66,7 +66,7 @@ class Jira
             $issue = $this->findIssue($summary, $project);
             if (!$issue) {
                 try {
-                    $issue = $this->createIssue($summary, $project);
+                    $issue = $this->createIssue($summary, $project, $worklog['issue']);
                 } catch (\Exception $e) {
                     $this->debug($e->getMessage());
                     continue;
@@ -138,7 +138,7 @@ class Jira
         $this->issueClient->createWorklog($idOrKey, $data, 'new', sprintf('%dm', $remaining/60));
     }
 
-    public function createIssue($summary, $projectKey)
+    public function createIssue($summary, $projectKey, array $issue)
     {
         $this->info(sprintf('++++++++++ %s ++++++++++', $summary), 2);
         
@@ -146,6 +146,8 @@ class Jira
         if (!$project) {
             throw new \Exception(sprintf('Project %s not found!', $projectKey));
         }
+        list($d,) = explode('/rest/api', $issue['self']);
+        
         $data = array(
             'fields' => [
                 'project' => [
@@ -155,10 +157,10 @@ class Jira
                 'issuetype' => [
                     'id' => 3, // FIXME: Task
                 ],
-                // TODO: description -> Duplicate (link)
+                'description' => sprintf('CopyLog %s/browse/%s', $d, $issue['key']),
             ]
         );
-
+        
         $result = $this->issueClient->create($data)->json();
         return $result;
     }
