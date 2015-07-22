@@ -211,7 +211,7 @@ class Jira
 
         $builder = new SearchBuilder();
         $find = array('?', '-', '[', ']', '"');
-        $replace = array('\\\\?', '\\\\-', '\\\\[', '\\\\]', '\\\\"');
+        $replace = array('\\\\?', '\\\\-', '\\\\[', '\\\\]', '\\"');
         $escaped = str_replace($find, $replace, $summary);
         $jql = sprintf('project = %s AND text ~ "%s"', $project, $escaped);
         $this->debug($jql);
