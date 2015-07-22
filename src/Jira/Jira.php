@@ -210,10 +210,11 @@ class Jira
         }
 
         $builder = new SearchBuilder();
-        $find = array('?', '-', '[', ']');
-        $replace = array('\\\\?', '\\\\-', '\\\\[', '\\\\]');
+        $find = array('?', '-', '[', ']', '"');
+        $replace = array('\\\\?', '\\\\-', '\\\\[', '\\\\]', '\\\\"');
         $escaped = str_replace($find, $replace, $summary);
         $jql = sprintf('project = %s AND text ~ "%s"', $project, $escaped);
+        $this->debug($jql);
         $builder->setJql($jql);
 
         $issues = $this->issueClient->search($builder)->json();
@@ -270,7 +271,7 @@ class Jira
         else
         {
             $builder = new SearchBuilder();
-            $jql = sprintf('project = %s AND resolution = Unresolved AND updated >= %s ORDER BY updated DESC', $project, $since);
+            $jql = sprintf('project = %s AND updated >= %s ORDER BY updated DESC', $project, $since);
             $builder->setJql($jql);
             $builder->setLimit($limit);
 
