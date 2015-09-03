@@ -295,5 +295,51 @@ class Jira
         
         return $logs;
     }
+    
+    public function findIssuesWithWorklogs(array $projects)
+    {
+        $this->debug(sprintf('from projects %s', implode(',', $projects)));
+        $issues = [];
+        
+        $cacheId = sprintf('projects_issues_%s', md5(serialize($projects)));
+        if (($cached = $this->getCache($cacheId))) {
+            return $cached;
+        }
+        else
+        {
+            $builder = new SearchBuilder();
+            $builder->setLimit(500);
+            
+            $jql = sprintf('project in (%s) and timespent > 0', implode(', ', $projects));
+            $this->debug($jql);
+            $builder->setJql($jql);
+
+            $issues = $this->issueClient->search($builder)->json()['issues'];
+            $this->saveCache($cacheId, $issues);
+        }
+        
+        $this->debug(sprintf('found %d issues', count($issues)), 1);
+        
+        return $issues;
+    }
+    
+    public function getWorklogsFromIssues(array $issues)
+    {
+        $worklogs = [];
+        $total = count($issues);
+        foreach ($issues as $k => $issue) {
+            $key = $issue['key'];
+            $cacheId = sprintf('issue_worklogs_%s', $key);
+            if (!($logs = $this->getCache($cacheId))) {
+                $this->debug(sprintf('(%d/%d) %s = %d worklogs', $k, $total, $key, count($logs)));
+                $logs = $this->issueClient->getFullWorklog($key)->json()['worklogs'];
+                if (count($logs) > 0) {
+                    $this->saveCache($cacheId, $logs);
+                }
+            }
+            $worklogs[$key] = $logs;
+        }
+        return $worklogs;
+    }
 
 }

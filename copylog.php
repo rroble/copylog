@@ -10,7 +10,7 @@ require_once __DIR__.'/vendor/autoload.php';
 
 $logger = new Logger('copylog');
 $logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
-$logger->pushHandler(new StreamHandler(__DIR__.'/copylog.log', Logger::INFO));
+$logger->pushHandler(new StreamHandler(__DIR__.'/logs/copylog.log', Logger::INFO));
 
 try {
     $config = new Config(__DIR__);
@@ -22,10 +22,10 @@ try {
 $cache = new ArrayCache();
 $logger->info('START');
 
-$alpha = new Jira($config->from, $logger);
+$alpha = new Jira($config->from, $logger, $cache);
 $alpha->verifyUser();
 
-$arcanys = new Jira($config->to, $logger);
+$arcanys = new Jira($config->to, $logger, $cache);
 $arcanys->verifyUser();
 
 foreach ($config->projects as $from => $to) 

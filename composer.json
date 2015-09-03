@@ -6,6 +6,6 @@
         "monolog/monolog": "1.13.*@dev"
     },
     "autoload": {
-        "psr-0": { "": "src/" }
+        "psr-4": { "Jira\\": "src/" }
     }
 }
